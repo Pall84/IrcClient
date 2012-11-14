@@ -6,7 +6,13 @@ import sys
 import Queue
 
 class CommandsFromConsole(threading.Thread):
-    """ Class for processing input from console."""
+    """ Class for picking up input from console.
+
+    Class that picks up input from console and adds it to queue.
+
+    The nature of the class is to run endlessely while calling
+    class is alive so the responsibility to kill this class lies with calling class.
+    """
     command_queue = None
 
     def run(self):
@@ -181,7 +187,29 @@ class IrcClient:
         # everything went ok
         return True
 
+    def __load_host_from_console(self):
+        """ assigns url of host.
+
+        checks if url of host is first argument
+        if not, host is set to default_host.
+        irc.freenode.net
+
+        """
+        if len(sys.argv) > 1:
+            self.host = sys.argv[1]
+
+        # no arguments from console
+        else:
+            print 'Missing irc server url as argument in command line'
+            print 'Signing up to default irc server %s' % self.default_host
+            self.host = self.default_host
+
     def __open_log_file(self):
+        """ opens file for logging.
+
+        opens file for logging, if we fail to open file
+        program terminates .
+        """
         try:
             self.log_file = open('irc.log', 'a')
         except IOError as e:
@@ -190,26 +218,45 @@ class IrcClient:
             exit(-1)
 
     def __get_tcp_connection(self):
+        """ opens tcp connection to irc server.
+
+        tries to establish tcp connection to irc serve with url
+        in class variable host and port number in class variable port
+
+        program terminates if we are unable to get connection
+        """
         try:
+            # open socket for connection
             self.irc_server = socket.socket()
+
+            # set timout in case no response is comming.
             self.irc_server.settimeout(3)
+
+            # trie to connect to irc server
             self.irc_server.connect((self.host, self.port))
         except socket.error as e:
             print 'Unable to connect to %s on port %i' %(self.host, self.port)
             print e.args
             exit(-1)
 
-    def __load_host_from_console(self):
-        if len(sys.argv) < 2:
-            print 'Missing irc server url as argument in command line'
-            print 'Signing up to default irc server %s' % self.default_host
-            self.host = self.default_host
-        else:
-            self.host = sys.argv[1]
-
     def __setup_commands_from_console(self):
+        """ initializer class variable command_from_console
+
+        initializer class variable command_from_console by
+        newing CommandFromConsole and assigning reference to that
+        instance to command_from_console. we then further give
+        command_from_console reference to our queue command_queue
+        so when commands_from_console add command from console
+        we can access those command in calling class.
+        """
+
+        # assign reference to new intance of CommandFromConsole
         self.command_from_console = CommandsFromConsole()
+
+        # add reference to our queue to CommandFromConsole instance queue
         self.command_from_console.command_queue = self.command_queue
+
+        # start adding command from console to command_queue
         self.command_from_console.start()
 
     def __log_message(self, msg):
