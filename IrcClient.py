@@ -9,11 +9,9 @@ class CommandsFromConsole(threading.Thread):
     """ Class for processing input from console."""
     command_queue = None
 
-    # runs when function start is called
     def run(self):
         while True:
             self.command_queue.put(raw_input())
-
 
 class IrcClient:
     """ Class for implementing irc client
@@ -33,6 +31,7 @@ class IrcClient:
     password = None
     command_from_console = None
     command_queue = Queue.Queue()
+    MOTD = ""
 
     def __init__(self):
         """ Initialize IrcClient."""
@@ -42,10 +41,39 @@ class IrcClient:
         self.__get_tcp_connection()
         self.__setup_commands_from_console()
 
-    def send_pong(self, pongmsg):
-        """ function for sending pong to irc server
-        """
-        self.__send_message('PONG', pongmsg)
+    def register(self):
+        if self.password is not None:
+            #TODO send pass
+            pass
+        self.send_nick(self.nick)
+        self.send_user(self.user_name, self.host, 'bull', self.real_name)
+
+    def run(self):
+        #register user to irc server
+        self.register()
+
+        while True:
+            # get possible commands from console
+            if not self.command_queue.empty():
+                command = self.command_queue.get()
+                if command.lower() == 'quit':
+                    self.send_quit('humpty dumpdty')
+
+            # check for response from irc server for 3 sec
+            else:
+                response = ""
+                try:
+                    response = self.irc_server.recv(4096)
+                except socket.error:
+                    pass
+                else:
+                    self.__process_response(response)
+
+    def __quit(self):
+        self.command_from_console._Thread__stop()
+        self.log_file.close()
+        self.irc_server.close()
+        exit()
 
     def send_nick(self, nick):
         """ function for register nick to irc server
@@ -107,6 +135,11 @@ class IrcClient:
         # send user command to irc server
         return self.__send_message('USER', parameter_list)
 
+    def send_pong(self, pongmsg):
+        """ function for sending pong to irc server
+        """
+        self.__send_message('PONG', pongmsg)
+
     def send_quit(self, quitmsg):
         """ function for sending quit msg to irc server
 
@@ -159,6 +192,7 @@ class IrcClient:
     def __get_tcp_connection(self):
         try:
             self.irc_server = socket.socket()
+            self.irc_server.settimeout(3)
             self.irc_server.connect((self.host, self.port))
         except socket.error as e:
             print 'Unable to connect to %s on port %i' %(self.host, self.port)
@@ -188,28 +222,73 @@ class IrcClient:
         # write command to logfile
         self.log_file.write(msg)
 
-    def register(self):
+    def __is_ping_message(self, response):
+        line = self.__eat_prefix(response)
+        match = re.match('^PING .*', line)
+        if match:
+            return  True
+        return False
 
-        if self.password is not None:
-            "TODO send pass"
-        self.send_nick(self.nick)
-        self.send_user(self.user_name, self.host, 'bull', self.real_name)
+    def __is_start_of_MOTD(self, response):
+        line = self.__eat_prefix(response)
+        match = re.match('(^RPL_MOTDSTART .*)|(^375 .*)', line)
+        if match:
+            return True
+        return False
 
-    def run(self):
-        while True:
-            if not self.command_queue.empty():
-                print self.command_queue.get()
+    def __is_MOTD(self, response):
+        line = self.__eat_prefix(response)
+        match = re.match('(^RPL_MOTD .*)|(^372 .*)', line)
+        if match:
+            return True
+        return False
+
+    def __is_end_MOTD(self, response):
+        line = self.__eat_prefix(response)
+        match = re.match('(^RPL_ENDOFMOTD .*)|(^376 .*)', line)
+        if match:
+            return True
+        return False
+
+    def __eat_prefix(self, response):
+        words = response.split(' ', 1)
+        if len(words) <= 1:
+            return words
+        if words[0][0] == ':':
+            return words[1]
+        return " ".join(words)
+
+    def __process_response(self, response):
+        # is connection down
+        if response == '':
+            print 'Connection went down'
+            self.__quit()
+        else:
+            messages = response.splitlines(True)
+            for message in messages:
+                # ping message
+                if self.__is_ping_message(message):
+                    line = self.__eat_prefix(message)
+                    words = line.split(':')
+                    trailer = words[1]
+                    self.send_pong(trailer)
+                # start of MOTD
+                elif self.__is_start_of_MOTD(message):
+                    line = self.__eat_prefix(message)
+                    self.MOTD += line
+                # MOTD
+                elif self.__is_MOTD(message):
+                    line = self.__eat_prefix(message)
+                    self.MOTD += line
+                # end of MOTD
+                elif self.__is_end_MOTD(message):
+                    line = self.__eat_prefix(message)
+                    self.MOTD += line
+                    print self.MOTD
+                else:
+                    print message
 
 
 client = IrcClient()
-#time.sleep(3)
-#client.register()
+time.sleep(3)
 client.run()
-
-# run while user does not type "quit"
-command = ""
-while command != 'quit':
-    command = raw_input('Type quit to terminate irc client')
-
-# send quit message to irc server
-client.send_quit('done')
