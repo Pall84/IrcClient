@@ -103,15 +103,13 @@ class IrcClient:
                     self.__process_response(response)
 
     def quit(self):
-        """ close all open threads
+        """ close all open streams
 
-        terminates console handler
         closes file stream to log file
         closes connection to irc server
         terminates program
         """
 
-        self.console_handler._Thread__stop()
         self.log_file.close()
         self.irc_server.close()
         exit()
@@ -370,11 +368,12 @@ class IrcClient:
             return True
         return False
 
-    def __eat_prefix(self, message='1 1'):
+    def __eat_prefix(self, message):
         match = re.match('^:.*', message)
         if match:
             words = message.split(' ', 1)
-            return words[1]
+            if len(words) > 1:
+                return words[1]
         else:
             return message
 
@@ -410,6 +409,8 @@ class IrcClient:
                 else:
                     print message
 
+    def __del__(self):
+        self.quit()
 
 client = IrcClient()
 time.sleep(3)
