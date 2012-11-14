@@ -5,7 +5,7 @@ import re
 import sys
 import Queue
 
-class CommandsFromConsole(threading.Thread):
+class ConsoleHandler(threading.Thread):
     """ Class for picking up input from console.
 
     Class that picks up input from console and adds it to queue.
@@ -13,7 +13,7 @@ class CommandsFromConsole(threading.Thread):
     The nature of the class is to run endlessely while calling
     class is alive so the responsibility to kill this class lies with calling class.
     """
-    command_queue = None
+    command_queue = Queue.Queue()
 
     def run(self):
         while True:
@@ -32,11 +32,10 @@ class IrcClient:
     default_host = 'irc.freenode.net'
     port = 6667
     nick = 'cave2'
-    user_name = 'nickcave3'
+    user_name = 'nickcave'
     real_name = 'duddi heimi3r'
     password = None
-    command_from_console = None
-    command_queue = Queue.Queue()
+    console_handler = ConsoleHandler()
     MOTD = ""
 
     def __init__(self):
@@ -45,13 +44,14 @@ class IrcClient:
         loads value of host from console or if that fails, default_host variable.
         opens file for logging, if that fails terminates program.
         opens tcp connection to server, if that failes terminates program.
-        sets up everything for reading input from console
         """
 
         self.__load_host_from_console()
         self.__open_log_file()
         self.__get_tcp_connection()
-        self.__setup_commands_from_console()
+
+        # start monitoring console for commands
+        self.console_handler.start()
 
     def register(self):
         """ registers user to irc server
@@ -67,19 +67,30 @@ class IrcClient:
         # optional to send password to register on irc server
         if self.password is not None:
             self.__send_pass(self.password)
-        self.send_nick(self.nick)
-        self.send_user(self.user_name, self.host, 'bull', self.real_name)
+        self.__send_nick(self.nick)
+        self.__send_user(self.user_name, self.host, 'bull', self.real_name)
 
     def run(self):
+        """ runs irc client
+
+        tries to register client to server
+        monitors console and connection to irc server for input
+        """
+
         #register user to irc server
         self.register()
 
         while True:
             # get possible commands from console
-            if not self.command_queue.empty():
-                command = self.command_queue.get()
-                if command.lower() == 'quit':
-                    self.send_quit('humpty dumpdty')
+            if not self.console_handler.command_queue.empty():
+                command = self.console_handler.command_queue.get()
+                words = command.split(' ',1)
+                if words[0].lower() == 'quit':
+                    self.__send_quit(words[1])
+                elif words[0].lower() == 'nick':
+                    self.irc_nick(words[1])
+                elif words[0].lower() == 'join':
+                    self.irc_join(words[1])
 
             # check for response from irc server for 3 sec
             else:
@@ -91,8 +102,16 @@ class IrcClient:
                 else:
                     self.__process_response(response)
 
-    def __quit(self):
-        self.command_from_console._Thread__stop()
+    def quit(self):
+        """ close all open threads
+
+        terminates console handler
+        closes file stream to log file
+        closes connection to irc server
+        terminates program
+        """
+
+        self.console_handler._Thread__stop()
         self.log_file.close()
         self.irc_server.close()
         exit()
@@ -105,18 +124,29 @@ class IrcClient:
                       or NUL or CR or LF, the first of whick may not be :>
 
         parameter: password, password client and server use for added security
+
+        return true if sending pass message was successful, otherwise sends false
         """
 
         # validates password according to BNF <middle>
         not_valid = re.match('^:|(.*[ \0\r\n]+.*)|\A$', password)
         if not_valid:
-            print 'Password was not valid, username was : ***********'
+            print 'Password was not valid, Password was : ***********'
             return False
 
         # send pass command to irc server
         return self.__send_message('PASS', password)
 
-    def send_nick(self, nick):
+    def irc_nick(self, nick):
+        self.__send_nick(nick)
+
+    def irc_join(self, channel):
+            self.__send_join(channel)
+
+    def __send_join(self, channel):
+        return self.__send_message('JOIN', channel)
+
+    def __send_nick(self, nick):
         """ function for register nick to irc server
 
         verifies nick is on valid format according to BNF
@@ -133,14 +163,14 @@ class IrcClient:
 
         # validates nick according to BNF <nick>
         valid = re.match('[a-zA-Z]([a-zA-Z]|[0-9]|[-\[\]\\`\^\{\}])*', nick)
-        if not(valid):
+        if not valid:
             print 'Nick was not valid, nick was : {0}'.format(nick)
             return False
 
         # send command to irc server
         return self.__send_message('NICK', nick)
 
-    def send_user(self, user_name, host, server, real_name):
+    def __send_user(self, user_name, host, server, real_name):
         """ function for register user to irc server
 
         verifies username and realname is on valid format according to BNF
@@ -176,12 +206,20 @@ class IrcClient:
         # send user command to irc server
         return self.__send_message('USER', parameter_list)
 
-    def send_pong(self, pongmsg):
+    def __send_pong(self, pongmsg):
         """ function for sending pong to irc server
         """
         self.__send_message('PONG', pongmsg)
 
-    def send_quit(self, quitmsg):
+    def __send_pong_from_message(self, message):
+        """ takes parameters from message and inserts into pongmsg
+        """
+        line = self.__eat_prefix(message)
+        words = line.split(':')
+        pongmsg = words[1]
+        self.__send_pong(pongmsg)
+
+    def __send_quit(self, quitmsg):
         """ function for sending quit msg to irc server
 
         verifies quitmsg is on valid format according to BNF
@@ -201,23 +239,38 @@ class IrcClient:
             return False
 
         # send quit command to irc server
+        quitmsg = ':%s' % quitmsg
         return self.__send_message('QUIT', quitmsg)
 
     def __send_message(self, command, parameter_list):
-        msg = unicode('%s %s\r\n' %(command, parameter_list))
+        """ function for sending message to irc serve
 
-        # validate command is not longer than 512 char
+        validates message is not longer than 512 characters
+
+        parameter: command, command of message.
+        parameter: parameter_list, parameter list of message
+
+        return true if we could send message
+        return false if we could not send message
+        """
+
+        msg = '%s %s\r\n' %(command, parameter_list)
+        # validate message is not longer than 512 char
         if len(msg) > 512:
-            print 'User command exceeded 512 chars, it was : {0} chars'.format(len(msg))
+            print 'message exceeded 512 chars, it was : {0} chars'.format(len(msg))
             return False
+
+        # try send message to irc server
         try:
             self.irc_server.send(msg)
         except socket.error as e:
             print e.args
-        # print command to console
+
+        # print message to console
         print msg.strip('\n')
 
-        self.__log_message(msg.strip('\n'))
+        # log message to log file
+        self.__log_message('client', msg.strip('\n'))
 
         # everything went ok
         return True
@@ -274,32 +327,12 @@ class IrcClient:
             print e.args
             exit(-1)
 
-    def __setup_commands_from_console(self):
-        """ initializer class variable command_from_console
-
-        initializer class variable command_from_console by
-        newing CommandFromConsole and assigning reference to that
-        instance to command_from_console. we then further give
-        command_from_console reference to our queue command_queue
-        so when commands_from_console add command from console
-        we can access those command in calling class.
-        """
-
-        # assign reference to new intance of CommandFromConsole
-        self.command_from_console = CommandsFromConsole()
-
-        # add reference to our queue to CommandFromConsole instance queue
-        self.command_from_console.command_queue = self.command_queue
-
-        # start adding command from console to command_queue
-        self.command_from_console.start()
-
-    def __log_message(self, msg):
+    def __log_message(self,source, msg):
         # timestamp
         date = time.gmtime()
 
         # format command for logfile
-        msg = '%s : client : %s' %(time.strftime("%a %d %b %Y %X %z", date ), msg)
+        msg = '%s : %s : %s' %(time.strftime("%a %d %b %Y %X %z", date ), source, msg)
 
         # write command to logfile
         self.log_file.write(msg)
@@ -318,6 +351,11 @@ class IrcClient:
             return True
         return False
 
+    def __add_message_to_MOTD(self, message):
+        words = message.split(' ',4)
+        self.MOTD += words[4]
+        self.__log_message('server', message.strip('\n'))
+
     def __is_MOTD(self, response):
         line = self.__eat_prefix(response)
         match = re.match('(^RPL_MOTD .*)|(^372 .*)', line)
@@ -332,41 +370,43 @@ class IrcClient:
             return True
         return False
 
-    def __eat_prefix(self, response):
-        words = response.split(' ', 1)
-        if len(words) <= 1:
-            return words
-        if words[0][0] == ':':
+    def __eat_prefix(self, message='1 1'):
+        match = re.match('^:.*', message)
+        if match:
+            words = message.split(' ', 1)
             return words[1]
-        return " ".join(words)
-
-    def __process_response(self, response):
-        # is connection down
-        if response == '':
-            print 'Connection went down'
-            self.__quit()
         else:
-            messages = response.splitlines(True)
+            return message
+
+    def __process_response(self, buffer):
+        # connection is down
+        if buffer == '':
+            print 'Connection went down'
+            self.quit()
+        else:
+            # split into messages
+            messages = buffer.splitlines(True)
+
+            # check kind of each message
             for message in messages:
+
                 # ping message
                 if self.__is_ping_message(message):
-                    line = self.__eat_prefix(message)
-                    words = line.split(':')
-                    trailer = words[1]
-                    self.send_pong(trailer)
+                    self.__send_pong_from_message(message)
+
                 # start of MOTD
                 elif self.__is_start_of_MOTD(message):
-                    line = self.__eat_prefix(message)
-                    self.MOTD += line
+                    self.__add_message_to_MOTD(message)
+
                 # MOTD
                 elif self.__is_MOTD(message):
-                    line = self.__eat_prefix(message)
-                    self.MOTD += line
+                    self.__add_message_to_MOTD(message)
+
                 # end of MOTD
                 elif self.__is_end_MOTD(message):
-                    line = self.__eat_prefix(message)
-                    self.MOTD += line
+                    self.__add_message_to_MOTD(message)
                     print self.MOTD
+
                 else:
                     print message
 
