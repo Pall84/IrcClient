@@ -40,7 +40,13 @@ class IrcClient:
     MOTD = ""
 
     def __init__(self):
-        """ Initialize IrcClient."""
+        """ Initialize IrcClient.
+
+        loads value of host from console or if that fails, default_host variable.
+        opens file for logging, if that fails terminates program.
+        opens tcp connection to server, if that failes terminates program.
+        sets up everything for reading input from console
+        """
 
         self.__load_host_from_console()
         self.__open_log_file()
@@ -48,9 +54,19 @@ class IrcClient:
         self.__setup_commands_from_console()
 
     def register(self):
+        """ registers user to irc server
+
+        checks if user has password, if so we send password message to irc server.
+        we then send nick message to irc server and then we send user message to
+        irc server. if any of those steps fails due to incorrect value user is asked
+        to enter those values into the console and we try again, or user can type quit
+        and terminate program.
+
+        """
+
+        # optional to send password to register on irc server
         if self.password is not None:
-            #TODO send pass
-            pass
+            self.__send_pass(self.password)
         self.send_nick(self.nick)
         self.send_user(self.user_name, self.host, 'bull', self.real_name)
 
@@ -80,6 +96,25 @@ class IrcClient:
         self.log_file.close()
         self.irc_server.close()
         exit()
+
+    def __send_pass(self, password):
+        """ function for register password to irc server
+
+         verifies password is on valid format according to BNF
+         <middle> ::= <any *non-empty sequence of octets not including SPACE
+                      or NUL or CR or LF, the first of whick may not be :>
+
+        parameter: password, password client and server use for added security
+        """
+
+        # validates password according to BNF <middle>
+        not_valid = re.match('^:|(.*[ \0\r\n]+.*)|\A$', password)
+        if not_valid:
+            print 'Password was not valid, username was : ***********'
+            return False
+
+        # send pass command to irc server
+        return self.__send_message('PASS', password)
 
     def send_nick(self, nick):
         """ function for register nick to irc server
