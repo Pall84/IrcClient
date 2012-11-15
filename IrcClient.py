@@ -6,6 +6,7 @@ import time
 import Queue
 import thread
 from threading import Timer
+import re
 
 class IrcClient:
 
@@ -20,6 +21,7 @@ class IrcClient:
         self.buffer = ''
         self.message_queue = Queue.Queue()
         self.log_file = open('irc.log', 'a')
+        self.running = True
     def __del__(self):
         self.log_file.close()
         self.irc_sever.close()
@@ -27,16 +29,12 @@ class IrcClient:
         thread.start_new_thread(self.__recv_server, ())
         thread.start_new_thread(self.__recv_console, ())
 
-        while True:
+        while self.running:
             if not self.message_queue.empty():
                 message = self.message_queue.get()
 
                 if message[0] == '/':
-                    command = message.split(' ',1)[0]
-                    if command == '/quit':
-                        self.__send('QUIT :gone')
-                        self.quit()
-                        break
+                    self.__process_console_command(message)
                 elif message.split(' ')[0] == 'PING':
                     msg = 'PONG %s' % message.split(' ')[1]
                     print message
@@ -46,8 +44,9 @@ class IrcClient:
                     self.quit()
                     break
                 else:
-                    message = self.__parse_message(message)
-                    if message:
+                    match = re.match('^:.+ .+( :.+)?', message)
+                    if match:
+                        message = self.__parse_message(message)
                         command = message[1][0]
                         if command == '001' or command == 'RPL_WELCOME':
                             msg = ' '.join(message[1][2:])
@@ -121,14 +120,47 @@ class IrcClient:
                             msg = ' '.join(message[1][2:])
                             self.__log_message('server', 'NOTICE  '+msg)
                             print msg
-                        else:
-                            print '%s : %s' %(message[0], message[1])
+                        elif command == 'NICK':
+                            msg = '%s is now known as %s' %(message[0], message[1][2])
+                            self.__log_message('server','NICK '+msg)
+                            print msg
+                    else:
+                        print '%s : %s' %(message[0], message[1])
 
             time.sleep(0.01)
+    def __process_console_command(self, message):
+        command = message.split(' ',1)[0].lower()
+        if command == '/quit':
+            self.__send('QUIT :gone')
+            self.quit()
+        elif command == '/notice':
+            words = message.split(' ',2)
+            if len(words) > 2:
+                self.notice(words[1], words[2])
+        elif command == '/nick':
+            words = message.split(' ',1)
+            if len(words) > 1:
+                self.nick(words[1])
+        elif command == '/join':
+            words = message.split(' ', 1)
+            if len(words) > 1:
+                self.join(words[1])
+        elif command == '/part':
+            words = message.split(' ', 1)
+            if len(words) > 1:
+                self.part(words[1])
+        elif command == '/privmsg':
+            words = message.split(' ', 2)
+            if len(words) > 2:
+                self.privmsg(words[1], words[2])
+        else:
+            print message
     def quit(self):
+        self.running = False
         time.sleep(3)
         self.irc_sever.close()
         self.log_file.close()
+        exit(0)
     def __send(self, message):
         print message
         self.__log_message('client', message)
