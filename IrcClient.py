@@ -5,7 +5,7 @@ import socket
 import time
 import Queue
 import thread
-import re
+from threading import Timer
 
 class IrcClient:
 
@@ -34,13 +34,17 @@ class IrcClient:
                 if message[0] == '/':
                     command = message.split(' ',1)[0]
                     if command == '/quit':
-                        self.__send('QUIT')
-
+                        self.__send('QUIT :gone')
+                        self.quit()
+                        break
                 elif message.split(' ')[0] == 'PING':
                     msg = 'PONG %s' % message.split(' ')[1]
                     print message
                     self.__log_message('server', message)
                     self.__send(msg)
+                elif message.split(' ')[0] == 'QUIT':
+                    self.quit()
+                    break
                 else:
                     message = self.__parse_message(message)
                     if message:
@@ -122,7 +126,7 @@ class IrcClient:
 
             time.sleep(0.01)
     def quit(self):
-        self.send('QUIT')
+        time.sleep(3)
         self.irc_sever.close()
         self.log_file.close()
     def __send(self, message):
@@ -180,13 +184,20 @@ class IrcClient:
             if message.count(':') > 1:
                 parameters.append(''.join(message.split(':')[2:]))
             return prefix, parameters
+    def part1(self):
+        self.nick(client.nickname)
+        self.user(client.username, client.host, client.server, client.realname)
+
+        def send_quit():
+            self.message_queue.put('/quit')
+
+        timer = Timer(120, send_quit)
+        timer.start()
+        self.run()
 
 
 client = IrcClient()
-client.nick(client.nickname)
-client.user(client.username, client.host, client.server, client.realname)
-client.run()
-client.quit()
+client.part1()
 
 
 
