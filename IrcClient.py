@@ -83,9 +83,11 @@ class IrcClient(object):
                 # this is command from console
                 elif message[0] == '/':
                     self.__process_console_command(message)
+
                 # this might be short command from server.
                 elif len(message.split(' ')) < 3:
                     self.__process_short_server_command(message)
+
                 #this might be long command from server.
                 else:
                     self.__process_long_server_command(message)
@@ -425,18 +427,19 @@ class IrcClient(object):
         elif command == 'NICK':
             # retrieve nick name, print and log it.
             message = '%s is now known as %s' %(message[0], message[1][2])
+            self.nickname = message[1][2]
             print message
             self.__log_message('server','NICK '+message)
 
         elif command == 'JOIN':
             # retrieve nick name, print and log it.
-            message = '%s just joined %s' %(message[0], message[1][2])
+            message = '%s just joined %s' %(message[0], ''.join(message[1][1:]))
             print message
             self.__log_message('server','JOIN '+message)
 
         elif command == 'PART':
             # retrieve nick name, print and log it.
-            message = '%s just left %s' %(message[0], message[1][1])
+            message = '%s just left %s' %(message[0], message[1][1:])
             print message
             self.__log_message('server','PART '+message)
 
@@ -480,8 +483,8 @@ class IrcClient(object):
     def privmsg(self, receiver='', message=''):
         """ send private message to irc server."""
 
-        message = 'PRIVMSG %s :%s' %(receiver, message)
-        self.send(message)
+        message = ':%s PRIVMSG %s :%s' %(self.nickname,receiver, message)
+        self.__send(message)
     def part(self, channel=''):
         """ send part message to irc server."""
 
