@@ -436,7 +436,7 @@ class IrcClient(object):
 
         elif command == 'PART':
             # retrieve nick name, print and log it.
-            message = '%s just left %s' %(message[0], message[1][2])
+            message = '%s just left %s' %(message[0], message[1][1])
             print message
             self.__log_message('server','PART '+message)
 
@@ -486,7 +486,7 @@ class IrcClient(object):
         """ send part message to irc server."""
 
         self.__send('PART '+channel)
-    def notice(self, receiver, message=''):
+    def notice(self, receiver='', message=''):
         """ send notice message to irc server."""
 
         message = 'NOTICE %s :%s' %(receiver, message)
