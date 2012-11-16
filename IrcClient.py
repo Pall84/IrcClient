@@ -76,8 +76,12 @@ class IrcClient(object):
                 # we retrieve message.
                 message = self.message_queue.get()
 
+                # handle empty string ( enter )
+                if not message:
+                    pass
+
                 # this is command from console
-                if message[0] == '/':
+                elif message[0] == '/':
                     self.__process_console_command(message)
                 # this might be short command from server.
                 elif len(message.split(' ')) < 3:
@@ -87,7 +91,7 @@ class IrcClient(object):
                     self.__process_long_server_command(message)
 
             # sleep for 0.05 second to reduce load on processor.
-            time.sleep(0.05)
+            #time.sleep(0.05)
     def __process_console_command(self, message):
         # retrieve command from message and make case insensitive.
         command = message.split(' ',1)[0].lower()
@@ -124,7 +128,10 @@ class IrcClient(object):
             # validate nick name is not missing.
             if len(words) > 1:
                 self.nick(words[1])
-            # message is missing nick name and we do nothing.
+
+            # message is missing channel name and we let server handle error checking.
+            else:
+                self.nick()
 
         elif command == '/join':
             # split message into command and channel name.
@@ -133,7 +140,9 @@ class IrcClient(object):
             # validate channel name is not missing
             if len(words) > 1:
                 self.join(words[1])
-            # message is missing channel name and we do nothing.
+            # message is missing channel name and we let server handle error checking.
+            else:
+                self.join()
 
         elif command == '/part':
             # split message into command and channel name.
@@ -142,7 +151,11 @@ class IrcClient(object):
             # validate channel name is not missing
             if len(words) > 1:
                 self.part(words[1])
-            # message is missing channel name and we do nothing.
+
+            # message is missing channel name and we let server handle error checking.
+            else:
+                self.part()
+
 
         elif command == '/privmsg':
             # split message into command, receiver and private message.
@@ -152,6 +165,30 @@ class IrcClient(object):
             if len(words) > 2:
                 self.privmsg(words[1], words[2])
             # message was missing receiver or private message and we do nothing.
+
+        elif command =='/names':
+            # split message into command and channel name.
+            words = message.split(' ', 1)
+
+            # channel name is not missing
+            if len(words) > 1:
+                self.name(words[1])
+
+            # no channel name
+            else:
+                self.name()
+
+        elif command =='/trace':
+            # split message into command and target.
+            words = message.split(' ', 1)
+
+            # channel name is not missing
+            if len(words) > 1:
+                self.trace(words[1])
+
+            # no target
+            else:
+                self.trace()
 
         else:
             # we have command which we do not recognize and only print it out to console
@@ -223,6 +260,48 @@ class IrcClient(object):
             print message
             self.__log_message('server', 'RPL_YOURID  '+message)
 
+        elif command == '200' or command == 'RPL_TRACELINK ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACELINK  '+message)
+
+        elif command == '201' or command == 'RPL_TRACECONNECTING ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACECONNECTING  '+message)
+
+        elif command == '202' or command == 'RPL_TRACEHANDSHAKE ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACEHANDSHAKE  '+message)
+
+        elif command == '203' or command == 'RPL_TRACEUNKNOWN ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACEUNKNOWN  '+message)
+
+        elif command == '204' or command == 'RPL_TRACEOPERATOR ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACEOPERATOR  '+message)
+
+        elif command == '205' or command == 'RPL_TRACEUSER ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACEUSER  '+message)
+
+        elif command == '206' or command == 'RPL_TRACESERVER ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACESERVER  '+message)
+
         elif command == '251' or command == 'RPL_LUSERCLIENT ':
             # retrieve message, print and log it.
             message = ' '.join(message[1][2:])
@@ -247,6 +326,12 @@ class IrcClient(object):
             print message
             self.__log_message('server', 'RPL_LUSERME  '+message)
 
+        elif command == '262' or command == 'RPL_TRACEEND ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_TRACEEND  '+message)
+
         elif command == '265' or command == 'RPL_LOCALUSERS ':
             # retrieve message, print and log it.
             message = ' '.join(message[1][2:])
@@ -258,6 +343,18 @@ class IrcClient(object):
             message = ' '.join(message[1][2:])
             print message
             self.__log_message('server', 'RPL_GLOBALUSERS  '+message)
+
+        elif command == '353' or command == 'RPL_NAMREPLY ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][3:])
+            print message
+            self.__log_message('server', 'RPL_NAMREPLY  '+message)
+
+        elif command == '366' or command == 'RPL_ENDOFNAMES ':
+            # retrieve message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'RPL_ENDOFNAMES  '+message)
 
         elif command == '375' or command == 'RPL_MOTDSTART ':
             # retrieve MOTD message, print and log it.
@@ -283,6 +380,30 @@ class IrcClient(object):
             print message
             self.__log_message('server', 'RPL_ENDOFMOTD  '+message)
 
+        elif command == '401' or command == 'ERR_NOSUCHNICK ':
+            # retrieve error message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'ERR_NOSUCHNICK  '+message)
+
+        elif command == '402' or command == 'ERR_NOSUCHSERVER ':
+            # retrieve error message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'ERR_NOSUCHSERVER  '+message)
+
+        elif command == '403' or command == 'ERR_NOSUCHCHANNEL ':
+            # retrieve error message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'ERR_NOSUCHCHANNEL  '+message)
+
+        elif command == '461' or command == 'ERR_NEEDMOREPARAMS ':
+            # retrieve error message, print and log it.
+            message = ' '.join(message[1][2:])
+            print message
+            self.__log_message('server', 'ERR_NEEDMOREPARAMS  '+message)
+
             # add end of MOTD to clients motd.
             self.motd += message
 
@@ -306,6 +427,18 @@ class IrcClient(object):
             message = '%s is now known as %s' %(message[0], message[1][2])
             print message
             self.__log_message('server','NICK '+message)
+
+        elif command == 'JOIN':
+            # retrieve nick name, print and log it.
+            message = '%s just joined %s' %(message[0], message[1][2])
+            print message
+            self.__log_message('server','JOIN '+message)
+
+        elif command == 'PART':
+            # retrieve nick name, print and log it.
+            message = '%s just left %s' %(message[0], message[1][2])
+            print message
+            self.__log_message('server','PART '+message)
 
         # we have command which we do not recognize and only print it out to console
         else:
@@ -332,32 +465,40 @@ class IrcClient(object):
         print message
         self.__log_message('client', message)
         self.irc_sever.send(message+'\r\n')
-    def nick(self, nick):
+    def nick(self, nick=''):
         """ send nick message to irc server."""
 
         self.__send('NICK ' + nick)
-    def user(self, username, host, server, realname):
+    def user(self, username='', host='', server='', realname=''):
         """ send user message to irc server."""
         message = 'USER %s %s %s :%s' %(username, host, server, realname)
         self.__send(message)
-    def join(self, channel):
+    def join(self, channel=''):
         """ send join message to irc server."""
 
         self.__send('JOIN '+channel)
-    def privmsg(self, receiver, message):
+    def privmsg(self, receiver='', message=''):
         """ send private message to irc server."""
 
         message = 'PRIVMSG %s :%s' %(receiver, message)
         self.send(message)
-    def part(self, channel):
+    def part(self, channel=''):
         """ send part message to irc server."""
 
         self.__send('PART '+channel)
-    def notice(self, receiver, message):
+    def notice(self, receiver, message=''):
         """ send notice message to irc server."""
 
         message = 'NOTICE %s :%s' %(receiver, message)
         self.__send(message)
+    def name(self, message=''):
+        """ send name message to irc server."""
+
+        self.__send('NAMES '+message)
+    def trace(self, target=''):
+        """ trace a path across irc network to target."""
+
+        self.__send('TRACE '+target)
     def __recv_server(self):
         """ retrieves message from irc server.
 
@@ -480,10 +621,14 @@ class IrcClient(object):
 
 client = IrcClient()
 
-# test til að keyra lið 1 í verkefninu
-# testfallið inniheldur timeout þráð sem kallar á quit eftir 2 mín
-# svo að ef notandi notar quit áður en það skeður, mun forritið enn
-# keyrast meðan timeout þráðurinn lifir.
+# function for running part 1 of assignment
+
+# note
+# in function we are using time out function in separate thread.
+# who sends quit command after 2 min. but because this thread
+# is alive. main program does not terminate until after 2 min if user decides
+# to terminate sooner than 2 min.
+
 #client.part1()
 
 client.nick(client.nickname)
