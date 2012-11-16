@@ -425,9 +425,10 @@ class IrcClient(object):
             self.__log_message('server', 'NOTICE  '+message)
 
         elif command == 'NICK':
+            self.nickname = message[1][2]
+
             # retrieve nick name, print and log it.
             message = '%s is now known as %s' %(message[0], message[1][2])
-            self.nickname = message[1][2]
             print message
             self.__log_message('server','NICK '+message)
 
