@@ -440,9 +440,15 @@ class IrcClient(object):
 
         elif command == 'PART':
             # retrieve nick name, print and log it.
-            message = '%s just left %s' %(message[0], message[1][1:])
+            message = '%s just left %s' %(message[0], message[1][1])
             print message
             self.__log_message('server','PART '+message)
+
+        elif command == 'PRIVMSG':
+            # retrieve nick name, print and log it.
+            message = '%s : %s' %(message[1][1], ''.join(message[1][2:]))
+            print message
+            self.__log_message('server','PRIVMSG '+message)
 
         # we have command which we do not recognize and only print it out to console
         else:
