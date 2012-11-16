@@ -80,6 +80,9 @@ class IrcClient(object):
                 if not message:
                     pass
 
+                elif message.split(' ')[0] == '/ctcp':
+                    self.__process_ctcp_console_command(message)
+
                 # this is command from console
                 elif message[0] == '/':
                     self.__process_console_command(message)
@@ -158,8 +161,7 @@ class IrcClient(object):
             else:
                 self.part()
 
-
-        elif command == '/privmsg':
+        elif command == '/msg':
             # split message into command, receiver and private message.
             words = message.split(' ', 2)
 
@@ -167,6 +169,15 @@ class IrcClient(object):
             if len(words) > 2:
                 self.privmsg(words[1], words[2])
             # message was missing receiver or private message and we do nothing.
+
+        elif command == '/ctcp':
+            # split message into command, receiver and action.
+            words = message.split(' ', 2)
+
+            # validate receiver and private message is not missing.
+            if len(words) > 2:
+                self.privmsg(words[1], words[2])
+                # message was missing receiver or private message and we do nothing.
 
         elif command =='/names':
             # split message into command and channel name.
@@ -425,16 +436,16 @@ class IrcClient(object):
             self.__log_message('server', 'NOTICE  '+message)
 
         elif command == 'NICK':
-            self.nickname = message[1][2]
+            self.nickname = message[1][1]
 
             # retrieve nick name, print and log it.
-            message = '%s is now known as %s' %(message[0], message[1][2])
+            message = '%s is now known as %s' %(message[0], message[1][1])
             print message
             self.__log_message('server','NICK '+message)
 
         elif command == 'JOIN':
             # retrieve nick name, print and log it.
-            message = '%s just joined %s' %(message[0], ''.join(message[1][1:]))
+            message = '%s just joined %s' %(message[0], message[1][1])
             print message
             self.__log_message('server','JOIN '+message)
 
@@ -445,14 +456,32 @@ class IrcClient(object):
             self.__log_message('server','PART '+message)
 
         elif command == 'PRIVMSG':
-            # retrieve nick name, print and log it.
-            message = '%s : %s' %(message[1][1], ''.join(message[1][2:]))
-            print message
-            self.__log_message('server','PRIVMSG '+message)
+            #check if this is ctcp message
+            if message[1][2][0] == '\001':
+                self.__process_ctcp_server_command(message)
+            else:
+                # retrieve nick name, print and log it.
+                message = '%s : %s' %(message[1][1], message[1][2])
+                print message
+                self.__log_message('server','PRIVMSG '+message)
 
         # we have command which we do not recognize and only print it out to console
         else:
             print '%s : %s' %(message[0], message[1])
+    def __process_ctcp_server_command(self, message):
+        command = message[1][2]
+
+        if command == '\001VERSION\001':
+            self.notice(message[0], 'VERSION Python-Irc-Client')
+        else:
+            print message
+    def __process_ctcp_console_command(self, message):
+        # retrieve command from message.
+        command = message.split(' ')[2].lower()
+        if command == 'version':
+            self.privmsg(message.split(' ')[1], '\001VERSION\001')
+        else:
+            print message
     def quit(self):
         """ terminates irc client."""
 
@@ -611,6 +640,11 @@ class IrcClient(object):
                 # add trailer to list of parameters.
                 parameters.append(''.join(message.split(':')[2:]))
 
+            try:
+                parameters.remove('')
+            except ValueError:
+                pass
+
             return prefix, parameters
     def part1(self):
         """ runs part 1 assignment """
@@ -644,3 +678,4 @@ client = IrcClient()
 client.nick(client.nickname)
 client.user(client.username, client.host, client.server, client.realname)
 client.run()
+
