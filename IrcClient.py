@@ -6,7 +6,6 @@ import time
 import Queue
 import thread
 from threading import Timer
-import re
 
 class IrcClient(object):
     """ Internet Relay Char Client.
@@ -60,12 +59,17 @@ class IrcClient(object):
         """ closes all streams in class deletion."""
         self.log_file.close()
         self.irc_sever.close()
-    def run(self):
-        """ Runs the irc client."""
+
+    def start(self):
+        """ Starts the irc client."""
 
         # open new threads for receiving input from console and irc server.
         thread.start_new_thread(self.__recv_server, ())
         thread.start_new_thread(self.__recv_console, ())
+
+        # registers nick and user to irc server.
+        self.__send('NICK '+client.nickname)
+        self.__send_user(client.username, client.host, client.server, client.realname)
 
         # runs while client should be running.
         while self.running:
@@ -80,133 +84,102 @@ class IrcClient(object):
                 if not message:
                     pass
 
+                # this is ctcp command from console
                 elif message.split(' ')[0] == '/ctcp':
                     self.__process_ctcp_console_command(message)
 
-                # this is command from console
+                # this is irc command from console
                 elif message[0] == '/':
-                    self.__process_console_command(message)
+                    self.__process_irc_console_command(message)
 
                 # this might be short command from server.
                 elif len(message.split(' ')) < 3:
-                    self.__process_short_server_command(message)
+                    self.__process_irc_short_server_command(message)
 
                 #this might be long command from server.
                 else:
-                    self.__process_long_server_command(message)
+                    self.__process_irc_long_server_command(message)
+    def quit(self):
+        """ terminates irc client."""
 
-            # sleep for 0.05 second to reduce load on processor.
-            #time.sleep(0.05)
-    def __process_console_command(self, message):
-        # retrieve command from message and make case insensitive.
-        command = message.split(' ',1)[0].lower()
+        # tell client to stop running.
+        self.running = False
 
-        # check what kind of command and respond.
-        if command == '/quit':
-            # split message into command and quit message.
-            words = message.split(' ',1)
+        # wait few seconds to pick up last messages from server.
+        time.sleep(3)
 
-            # quit message was included
-            if len(words) > 1:
-                self.__send('QUIT :'+words[1])
+        # close server and log file connections.
+        self.irc_sever.close()
+        self.log_file.close()
 
-            # quit message was not included
-            else:
-                self.__send('QUIT')
+        # terminate program
+        exit(0)
 
-            # terminate program
-            self.quit()
+    def __send_user(self, username='', host='', server='', realname=''):
+        """ send user message to irc server."""
 
-        elif command == '/notice':
-            # split message into command, receiver and notice message.
-            words = message.split(' ',2)
+        message = 'USER %s %s %s :%s' %(username, host, server, realname)
+        self.__send(message)
+    def __send(self, message):
+        """ send messages to irc server."""
 
-            # validate message is not missing any part.
-            if len(words) > 2:
-                self.notice(words[1], words[2])
-            # message was missing receiver or notice message and we do nothing.
+        # print, log and send message.
+        print message
+        self.__log_message('client', message)
+        self.irc_sever.send(message+'\r\n')
 
-        elif command == '/nick':
-            # split message into command and nick name.
-            words = message.split(' ',1)
+    def __process_irc_console_command(self, message):
 
-            # validate nick name is not missing.
-            if len(words) > 1:
-                self.nick(words[1])
+        commands_without_trailer = 'NICK', 'JOIN', 'PART', 'NAMES', 'TRACE',\
+                                   'MODE', 'LIST', 'INVITE', 'KICK',\
+                                   'VERSION', 'STATS', 'LINKS', 'TIME', 'ADMIN',\
+                                   'INFO', 'WHO', 'WHOIS', 'WHOWAS'
 
-            # message is missing channel name and we let server handle error checking.
-            else:
-                self.nick()
+        commands_with_trailer = 'PRIVMSG', 'NOTICE', 'TOPIC'
 
-        elif command == '/join':
-            # split message into command and channel name.
-            words = message.split(' ', 1)
+        # retrieve irc command from message and make case insensitive.
+        # remove '/' .
+        command = message.split(' ',1)[0][1:].upper()
 
-            # validate channel name is not missing
-            if len(words) > 1:
-                self.join(words[1])
-            # message is missing channel name and we let server handle error checking.
-            else:
-                self.join()
+        if command in commands_without_trailer:
 
-        elif command == '/part':
-            # split message into command and channel name.
-            words = message.split(' ', 1)
+            parameter = ''
 
-            # validate channel name is not missing
-            if len(words) > 1:
-                self.part(words[1])
+            # has parameter
+            if len(message.split(' ')) > 1:
+                parameter =  message.split(' ',1)[1]
 
-            # message is missing channel name and we let server handle error checking.
-            else:
-                self.part()
+            self.__send(command+' '+parameter)
 
-        elif command == '/msg':
-            # split message into command, receiver and private message.
-            words = message.split(' ', 2)
+        elif command in commands_with_trailer:
 
-            # validate receiver and private message is not missing.
-            if len(words) > 2:
-                self.privmsg(words[1], words[2])
-            # message was missing receiver or private message and we do nothing.
+            parameter = ''
+            trailer = ''
 
-        elif command == '/ctcp':
-            # split message into command, receiver and action.
-            words = message.split(' ', 2)
+            # has parameter
+            if len(message.split(' ')) > 1:
+                parameter = message.split(' ')[1]
 
-            # validate receiver and private message is not missing.
-            if len(words) > 2:
-                self.privmsg(words[1], words[2])
-                # message was missing receiver or private message and we do nothing.
+            # has trailer
+            if len(message.split(' ')) > 2:
+                trailer = ' :'+message.split(' ',2)[2]
 
-        elif command =='/names':
-            # split message into command and channel name.
-            words = message.split(' ', 1)
+            self.__send(command+' '+parameter+trailer)
 
-            # channel name is not missing
-            if len(words) > 1:
-                self.name(words[1])
+        elif command == 'QUIT' or command == 'AWAY':
 
-            # no channel name
-            else:
-                self.name()
+            trailer = ''
 
-        elif command =='/trace':
-            # split message into command and target.
-            words = message.split(' ', 1)
+            # has trailer
+            if len(message.split(' ')) > 1:
+                trailer = ' :'+message.split(' ', 1)[1]
 
-            # channel name is not missing
-            if len(words) > 1:
-                self.trace(words[1])
+            self.__send(command+trailer)
 
-            # no target
-            else:
-                self.trace()
-
+        # we do not recognize the command and just print it to console.
         else:
-            # we have command which we do not recognize and only print it out to console
             print message
-    def __process_short_server_command(self, message):
+    def __process_irc_short_server_command(self, message):
         # retrieve command from message.
         command = message.split(' ', 1)[0]
 
@@ -229,7 +202,7 @@ class IrcClient(object):
         # we have command which we do not recognize and only print it out to console
         else:
             print message
-    def __process_long_server_command(self, message):
+    def __process_irc_long_server_command(self, message):
         # parse message into command and parameter list.
         message = self.__parse_message(message)
 
@@ -468,13 +441,7 @@ class IrcClient(object):
         # we have command which we do not recognize and only print it out to console
         else:
             print '%s : %s' %(message[0], message[1])
-    def __process_ctcp_server_command(self, message):
-        command = message[1][2]
 
-        if command == '\001VERSION\001':
-            self.notice(message[0], 'VERSION Python-Irc-Client')
-        else:
-            print message
     def __process_ctcp_console_command(self, message):
         # retrieve command from message.
         command = message.split(' ')[2].lower()
@@ -482,62 +449,14 @@ class IrcClient(object):
             self.privmsg(message.split(' ')[1], '\001VERSION\001')
         else:
             print message
-    def quit(self):
-        """ terminates irc client."""
+    def __process_ctcp_server_command(self, message):
+        command = message[1][2]
 
-        # tell client to stop running.
-        self.running = False
+        if command == '\001VERSION\001':
+            self.notice(message[0], 'VERSION Python-Irc-Client')
+        else:
+            print message
 
-        # wait few seconds to pick up last messages from server.
-        time.sleep(3)
-
-        # close server and log file connections.
-        self.irc_sever.close()
-        self.log_file.close()
-
-        # terminate program
-        exit(0)
-    def __send(self, message):
-        """ send messages to irc server."""
-
-        # print, log and send message.
-        print message
-        self.__log_message('client', message)
-        self.irc_sever.send(message+'\r\n')
-    def nick(self, nick=''):
-        """ send nick message to irc server."""
-
-        self.__send('NICK ' + nick)
-    def user(self, username='', host='', server='', realname=''):
-        """ send user message to irc server."""
-        message = 'USER %s %s %s :%s' %(username, host, server, realname)
-        self.__send(message)
-    def join(self, channel=''):
-        """ send join message to irc server."""
-
-        self.__send('JOIN '+channel)
-    def privmsg(self, receiver='', message=''):
-        """ send private message to irc server."""
-
-        message = ':%s PRIVMSG %s :%s' %(self.nickname,receiver, message)
-        self.__send(message)
-    def part(self, channel=''):
-        """ send part message to irc server."""
-
-        self.__send('PART '+channel)
-    def notice(self, receiver='', message=''):
-        """ send notice message to irc server."""
-
-        message = 'NOTICE %s :%s' %(receiver, message)
-        self.__send(message)
-    def name(self, message=''):
-        """ send name message to irc server."""
-
-        self.__send('NAMES '+message)
-    def trace(self, target=''):
-        """ trace a path across irc network to target."""
-
-        self.__send('TRACE '+target)
     def __recv_server(self):
         """ retrieves message from irc server.
 
@@ -560,6 +479,7 @@ class IrcClient(object):
             # if buffer is empty we know connection is down, and we stop the while loop.
             if self.buffer == '':
                 print 'Connection down'
+                self.running = False
                 break
 
             # we process response from server.
@@ -646,6 +566,8 @@ class IrcClient(object):
                 pass
 
             return prefix, parameters
+
+
     def part1(self):
         """ runs part 1 assignment """
 
@@ -675,7 +597,5 @@ client = IrcClient()
 
 #client.part1()
 
-client.nick(client.nickname)
-client.user(client.username, client.host, client.server, client.realname)
-client.run()
+client.start()
 
