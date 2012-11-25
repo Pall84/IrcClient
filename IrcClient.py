@@ -7,6 +7,29 @@ import Queue
 import thread
 from threading import Timer
 
+def dqn_to_int(st):
+    """
+    Convert dotted quad notation to integer
+    "127.0.0.1" => 2130706433
+    """
+    st = st.split(".")
+    ###
+    # That is not so elegant as 'for' cycle and
+    # not extensible at all, but that works faster
+    ###
+    return int("%02x%02x%02x%02x" % (int(st[0]),int(st[1]),int(st[2]),int(st[3])),16)
+
+
+def int_to_dqn(st):
+    """
+    Convert integer to dotted quad notation
+    """
+    st = "%08x" % (st)
+    ###
+    # The same issue as for `dqn_to_int()`
+    ###
+    return "%i.%i.%i.%i" % (int(st[0:2],16),int(st[2:4],16),int(st[4:6],16),int(st[6:8],16))
+
 class IrcClient(object):
     """ Internet Relay Char Client.
 
@@ -318,11 +341,28 @@ class IrcClient(object):
             print message
     def __process_ctcp_server_command(self, message):
         command = message[1][2]
+        event = message[1][2][1:len(message[1][2])-1].split(' ')
 
         if command == '\001VERSION\001':
             self.notice(message[0], 'VERSION Python-Irc-Client')
+        elif event[0].upper() == "DCC" and event[1].upper() == "SEND":
+            print event
+            thread.start_new_thread(self.__recv_DCC, (event[2], int(event[3]), int(event[4]), int(event[5])) )
         else:
             print message
+
+    def __recv_DCC(self, filename, ip, port, datasize):
+        ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((int_to_dqn(ip), port))
+        newFile = open(filename, 'wb')
+        while True:
+            da = s.recv(1024)
+            if not da : break
+            newFile.write(da)
+        newFile.close()
+        s.close()
+        print filename, "DONE"
 
     def __recv_server(self):
         """ retrieves message from irc server.
