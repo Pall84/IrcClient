@@ -77,7 +77,7 @@ class IrcClient(object):
         self.realname = 'default real name'
         self.buffer = ''
         self.message_queue = Queue.Queue()
-        self.log_file = open('irc.log', 'a')
+        self.log_file =  open('irc.log', 'a')
         self.running = True
     def __del__(self):
         """ closes all streams in class deletion."""
@@ -446,6 +446,7 @@ class IrcClient(object):
             # retrieve message from console and add to message queue of client.
             message = raw_input()
             self.message_queue.put(message)
+            time.sleep(0.5)
     def __log_message(self, type, message):
         """ log message to log file
 
