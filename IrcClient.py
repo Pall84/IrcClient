@@ -6,6 +6,7 @@ import time
 import Queue
 import thread
 from threading import Timer
+import platform
 
 def dqn_to_int(st):
     """
@@ -314,7 +315,12 @@ class IrcClient(object):
 
         elif command == 'NOTICE':
             # retrieve nick name, print and log it.
-            message = '%s : %s' %(message[1][1], message[1][2])
+            nick_or_channel = ""
+            if self.nickname == message[1][1]:
+                nick_or_channel = message[0]
+            else:
+                nick_or_channel = "%s %s" %(message[1][1], message[0])
+            message = '%s : %s' %(nick_or_channel, message[1][2])
             print message
             self.__log_message('server','NOTICE '+message)
 
@@ -324,7 +330,12 @@ class IrcClient(object):
                 self.__process_ctcp_server_command(message)
             else:
                 # retrieve nick name, print and log it.
-                message = '%s : %s' %(message[1][1], message[1][2])
+                nick_or_channel = ""
+                if self.nickname == message[1][1]:
+                    nick_or_channel = message[0]
+                else:
+                    nick_or_channel = "%s %s" %(message[1][1], message[0])
+                message = '%s : %s' %(nick_or_channel, message[1][2])
                 print message
                 self.__log_message('server','PRIVMSG '+message)
 
@@ -334,9 +345,11 @@ class IrcClient(object):
 
     def __process_ctcp_console_command(self, message):
         # retrieve command from message.
-        command = message.split(' ')[2].lower()
+        words = message.split(' ')
+        command = words[2].lower()
         if command == 'version':
-            self.privmsg(message.split(' ')[1], '\001VERSION\001')
+            msg = "/privmsg %s %s" %(words[1],'\001VERSION\001' )
+            self.message_queue.put(msg)
         else:
             print message
     def __process_ctcp_server_command(self, message):
@@ -344,15 +357,18 @@ class IrcClient(object):
         event = message[1][2][1:len(message[1][2])-1].split(' ')
 
         if command == '\001VERSION\001':
-            self.notice(message[0], 'VERSION Python-Irc-Client')
+            msg = "/privmsg %s %s" %(message[0], 'VERSION Python-Irc-Client' +" "
+                    + platform.system() + " " + platform.release())
+            self.message_queue.put(msg)
         elif event[0].upper() == "DCC" and event[1].upper() == "SEND":
             print event
-            thread.start_new_thread(self.__recv_DCC, (event[2], int(event[3]), int(event[4]), int(event[5])) )
+            thread.start_new_thread(self.__recv_DCC, (event[2], int(event[3]), int(event[4]), int(event[5]), message[0]) )
         else:
             print message
 
-    def __recv_DCC(self, filename, ip, port, datasize):
-        ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
+    def __recv_DCC(self, filename, ip, port, datasize, nick=""):
+        #ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
+        #ip = dqn_to_int("10.2.17.147")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((int_to_dqn(ip), port))
         newFile = open(filename, 'wb')
@@ -361,6 +377,8 @@ class IrcClient(object):
             if not da : break
             newFile.write(da)
         newFile.close()
+        if newFile.__sizeof__() < datasize:
+            "/privmsg %s %s" %("kalli", "kalli2")
         s.close()
         print filename, "DONE"
 
