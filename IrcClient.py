@@ -374,8 +374,11 @@ class IrcClient(object):
         newFile = open(filename, 'wb')
         while True:
             da = s.recv(1024)
-            if not da : break
+            if not da :
+                break
             newFile.write(da)
+            if newFile.tell() == datasize:
+                break
         newFile.close()
         if newFile.__sizeof__() < datasize:
             "/privmsg %s %s" %("kalli", "kalli2")
