@@ -123,6 +123,9 @@ class IrcClient(object):
                 #this might be long command from server.
                 else:
                     self.__process_irc_long_server_command(message)
+
+            # rest
+            time.sleep(0.05)
     def quit(self):
         """ terminates irc client."""
 
@@ -370,7 +373,11 @@ class IrcClient(object):
         #ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
         #ip = dqn_to_int("10.2.17.147")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((int_to_dqn(ip), port))
+        try:
+            s.connect((int_to_dqn(ip), port))
+        except socket.error as e:
+            msg = "/privmsg %s failed to connect to your host" %nick
+            self.message_queue.put(msg)
         newFile = open(filename, 'wb')
         while True:
             da = s.recv(1024)
@@ -381,7 +388,8 @@ class IrcClient(object):
                 break
         newFile.close()
         if newFile.__sizeof__() < datasize:
-            "/privmsg %s %s" %("kalli", "kalli2")
+            msg = "/privmsg %s failed to recieve file" %nick
+            self.message_queue.put(msg)
         s.close()
         print filename, "DONE"
 
