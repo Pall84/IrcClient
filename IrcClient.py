@@ -1,4 +1,3 @@
-__author__ = 'Palli'
 
 import sys
 import socket
@@ -364,18 +363,16 @@ class IrcClient(object):
         event = message[1][2][1:len(message[1][2])-1].split(' ')
 
         if command == '\001VERSION\001':
-            msg = "/privmsg %s %s" %(message[0], 'VERSION Python-Irc-Client' +" "
+            msg = "/privmsg %s %s" %(message[0], 'VERSION Python-Irc-Client' + " "
                     + platform.system() + " " + platform.release())
             self.message_queue.put(msg)
         elif event[0].upper() == "DCC" and event[1].upper() == "SEND":
-            #print event
+            self.printConsole( event )
             thread.start_new_thread(self.__recv_DCC, (event[2], int(event[3]), int(event[4]), int(event[5]), message[0]) )
         else:
             self.printConsole( message )
 
     def __recv_DCC(self, filename, ip, port, datasize, nick=""):
-        #ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
-        #ip = dqn_to_int("10.2.17.147")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             s.connect((int_to_dqn(ip), port))
@@ -390,13 +387,14 @@ class IrcClient(object):
             newFile.write(da)
             if newFile.tell() == datasize:
                 break
-        newFile.close()
-        if newFile.__sizeof__() < datasize:
-            msg = "/privmsg %s failed to recieve file" %nick
-            self.message_queue.put(msg)
         s.close()
-        message = filename, "DONE"
-        self.printConsole( message )
+        if newFile.tell() < datasize:
+            msg = "/privmsg %s failed to recieve %s" %(nick, filename)
+            self.message_queue.put(msg)
+        else :
+            message = "Success Transfer File from %s : %s" %(nick, filename)
+            self.printConsole( message )
+        newFile.close()
 
     def __recv_server(self):
         """ retrieves message from irc server.
