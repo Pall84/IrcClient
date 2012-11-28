@@ -7,6 +7,7 @@ import Queue
 import thread
 from threading import Timer
 import platform
+import readline
 
 def dqn_to_int(st):
     """
@@ -151,7 +152,7 @@ class IrcClient(object):
         """ send messages to irc server."""
 
         # print, log and send message.
-        print message
+        self.printConsole( message )
         self.__log_message('client', message)
         self.irc_sever.send(message+'\r\n')
 
@@ -205,7 +206,7 @@ class IrcClient(object):
 
         # we do not recognize the command and just print it to console.
         else:
-            print message
+            self.printConsole( message )
     def __process_irc_short_server_command(self, message):
         # retrieve command from message.
         command = message.split(' ', 1)[0]
@@ -216,19 +217,19 @@ class IrcClient(object):
             words = message.split(' ',1)
 
             # print, log and send pong response.
-            print message
+            self.printConsole( message )
             self.__log_message('server', message)
             self.__send('PONG '+words[1])
 
         elif command == 'QUIT':
             # print, log and terminate program.
-            print message
+            self.printConsole( message )
             self.__log_message('server', message)
             self.quit()
 
         # we have command which we do not recognize and only print it out to console
         else:
-            print message
+            self.printConsole( message )
     def __process_irc_long_server_command(self, message):
 
         irc_command = ['001', 'RPL_WELCOME'], ['002', 'RPL_YOURHOST'], ['003', 'RPL_CREATED'],\
@@ -291,7 +292,7 @@ class IrcClient(object):
             if command == c[0] or command == c[1]:
                 # retrieve message, print and log it.
                 message = ' '.join(message[1][2:])
-                print message
+                self.printConsole( message )
                 self.__log_message('server', c[1]+' '+message)
                 return
 
@@ -301,19 +302,19 @@ class IrcClient(object):
 
             # retrieve nick name, print and log it.
             message = '%s is now known as %s' %(message[0], message[1][1])
-            print message
+            self.printConsole( message )
             self.__log_message('server','NICK '+message)
 
         elif command == 'JOIN':
             # retrieve nick name, print and log it.
             message = '%s just joined %s' %(message[0], message[1][1])
-            print message
+            self.printConsole( message )
             self.__log_message('server','JOIN '+message)
 
         elif command == 'PART':
             # retrieve nick name, print and log it.
             message = '%s just left %s' %(message[0], message[1][1])
-            print message
+            self.printConsole( message )
             self.__log_message('server','PART '+message)
 
         elif command == 'NOTICE':
@@ -324,7 +325,7 @@ class IrcClient(object):
             else:
                 nick_or_channel = "%s %s" %(message[1][1], message[0])
             message = '%s : %s' %(nick_or_channel, message[1][2])
-            print message
+            self.printConsole( message )
             self.__log_message('server','NOTICE '+message)
 
         elif command == 'PRIVMSG':
@@ -339,12 +340,12 @@ class IrcClient(object):
                 else:
                     nick_or_channel = "%s %s" %(message[1][1], message[0])
                 message = '%s : %s' %(nick_or_channel, message[1][2])
-                print message
+                self.printConsole( message )
                 self.__log_message('server','PRIVMSG '+message)
 
         # we have command which we do not recognize and only print it out to console
         else:
-            print '%s : %s' %(message[0], message[1])
+            self.printConsole( '%s : %s' %(message[0], message[1]) )
 
     def __process_ctcp_console_command(self, message):
         # retrieve command from message.
@@ -354,7 +355,7 @@ class IrcClient(object):
             msg = "/privmsg %s %s" %(words[1],'\001VERSION\001' )
             self.message_queue.put(msg)
         else:
-            print message
+            self.printConsole( message )
     def __process_ctcp_server_command(self, message):
         command = message[1][2]
         event = message[1][2][1:len(message[1][2])-1].split(' ')
@@ -364,10 +365,10 @@ class IrcClient(object):
                     + platform.system() + " " + platform.release())
             self.message_queue.put(msg)
         elif event[0].upper() == "DCC" and event[1].upper() == "SEND":
-            print event
+            #print event
             thread.start_new_thread(self.__recv_DCC, (event[2], int(event[3]), int(event[4]), int(event[5]), message[0]) )
         else:
-            print message
+            self.printConsole( message )
 
     def __recv_DCC(self, filename, ip, port, datasize, nick=""):
         #ip = 3232235784 # IP TALA INNANHUS! 192.168.1.8
@@ -391,7 +392,8 @@ class IrcClient(object):
             msg = "/privmsg %s failed to recieve file" %nick
             self.message_queue.put(msg)
         s.close()
-        print filename, "DONE"
+        message = filename, "DONE"
+        self.printConsole( message )
 
     def __recv_server(self):
         """ retrieves message from irc server.
@@ -444,7 +446,7 @@ class IrcClient(object):
         while self.running:
 
             # retrieve message from console and add to message queue of client.
-            message = raw_input()
+            message = raw_input('> ')
             self.message_queue.put(message)
             time.sleep(0.5)
     def __log_message(self, type, message):
@@ -503,6 +505,12 @@ class IrcClient(object):
                 pass
 
             return prefix, parameters
+
+    def printConsole(self,msg):
+        sys.stdout.write('\r'+' '*(len(readline.get_line_buffer())+2)+'\r')
+        print msg
+        sys.stdout.write('> ' + readline.get_line_buffer())
+        sys.stdout.flush()
 
 
     def part1(self):
