@@ -9,8 +9,10 @@ from threading import Timer
 import platform
 import readline
 
+
 def dqn_to_int(st):
     """
+    http://code.activestate.com/recipes/65219-ip-address-conversion-functions/#c3
     Convert dotted quad notation to integer
     "127.0.0.1" => 2130706433
     """
@@ -24,6 +26,7 @@ def dqn_to_int(st):
 
 def int_to_dqn(st):
     """
+    http://code.activestate.com/recipes/65219-ip-address-conversion-functions/#c3
     Convert integer to dotted quad notation
     """
     st = "%08x" % (st)
@@ -506,6 +509,7 @@ class IrcClient(object):
 
             return prefix, parameters
 
+    # http://stackoverflow.com/a/4653306
     def printConsole(self,msg):
         sys.stdout.write('\r'+' '*(len(readline.get_line_buffer())+2)+'\r')
         print msg
